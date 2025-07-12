@@ -1,41 +1,71 @@
-from __future__ import annotations
-import asyncio
-import uuid
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from pathlib import Path
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
-from ..schemas.news import NewsIn, NewsOut
-from ..deps import get_settings, get_verifier
+from datetime import datetime
+from zoneinfo import ZoneInfo
+import subprocess
 
-router = APIRouter(tags=["verifier"])
+router = APIRouter(prefix="/verifier", tags=["verifier"])
 
-# —— 極簡 in-memory 任務表 —— #
-_TASKS: dict[str, str] = {}      # task_id -> status
+@router.post("/query")
+async def query_verifier(file: UploadFile = File(...), date: str = Form(...)):
+    # 驗證日期格式 (yyyy/mm/dd)
+    try:
+        news_date = datetime.strptime(date, "%Y/%m/%d").date()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="日期格式錯誤，請使用 yyyy/mm/dd")
 
-@router.post("/verify", response_model=NewsOut, summary="提交新聞驗證")
-async def verify(
-    payload: NewsIn,
-    bg: BackgroundTasks,
-    settings = Depends(get_settings),
-    verifier = Depends(get_verifier),
-) -> NewsOut:
-    task_id = uuid.uuid4().hex[:8]
-    _TASKS[task_id] = "processing"
+    # 讀取上傳的文案內容
+    content_bytes = await file.read()
+    try:
+        text_content = content_bytes.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        text_content = content_bytes.decode("utf-8", errors="ignore")
 
-    # 背景執行長流程
-    async def _run():
-        try:
-            await asyncio.to_thread(verifier, task_id, payload.text)
-            _TASKS[task_id] = "done"
-        except Exception as e:          # 真實場景請記 log
-            _TASKS[task_id] = "error"
-            print("Verifier error →", e)
+    # 合併日期與文案
+    merged = f"新聞日期：{date}。{text_content}"
 
-    bg.add_task(_run)
-    return NewsOut(task_id=task_id, status="processing")
+    # 設定專案根目錄與暫存路徑
+    project_root = Path(__file__).resolve().parents[3]
+    interim_dir = project_root / "data" / "interim" / "verifier" / "user-input"
+    interim_dir.mkdir(parents=True, exist_ok=True)
 
+    # 取得當前處理日期與時間 (亞洲/台北)
+    now = datetime.now(ZoneInfo("Asia/Taipei"))
+    current_date_str = now.strftime("%Y-%m-%d")
+    current_time_str = now.strftime("%H%M")
 
-@router.get("/verify/{task_id}", response_model=NewsOut, summary="查詢任務狀態")
-async def verify_status(task_id: str) -> NewsOut:
-    if task_id not in _TASKS:
-        raise HTTPException(404, detail="task_id not found")
-    return NewsOut(task_id=task_id, status=_TASKS[task_id])
+    # 檔名由新聞日期、處理日期與處理時間組成 (格式: yyyy-mm-dd_yyyy-mm-dd_HHMM)
+    filename_base = f"{news_date.strftime('%Y-%m-%d')}_{current_date_str}_{current_time_str}"
+    input_path = interim_dir / f"{filename_base}.txt"
+    input_path.write_text(merged, encoding="utf-8")
+
+    # 呼叫處理 pipeline
+    try:
+        subprocess.run(
+            ["python", "-m", "src.qa.verifier.pipeline", input_path.name],
+            cwd=str(project_root),
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except subprocess.CalledProcessError as e:
+        raise HTTPException(status_code=500, detail=f"Pipeline 執行錯誤：{e.stderr}")
+
+    # 讀取處理後的結果檔案
+    processed_dir = project_root / "data" / "processed" / "verifier"
+    judge_matches = list(processed_dir.glob(f"judge_result_{filename_base}.txt"))
+    kg_matches = list(processed_dir.glob(f"news_kg_{filename_base}.txt"))
+    if not judge_matches or not kg_matches:
+        raise HTTPException(status_code=500, detail="找不到處理結果檔案")
+
+    judge_path = judge_matches[0]
+    kg_path = kg_matches[0]
+
+    judge_result = judge_path.read_text(encoding="utf-8")
+    news_kg = kg_path.read_text(encoding="utf-8")
+
+    # 刪除暫存輸入檔
+    input_path.unlink(missing_ok=True)
+
+    # 回傳判斷結果與知識內容
+    return {"judge_result": judge_result, "news_kg": news_kg}

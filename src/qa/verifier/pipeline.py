@@ -5,7 +5,7 @@
 
 執行方式：
   - 全量：python -m src.qa.verifier.pipeline
-  - 單篇：python -m src.qa.verifier.pipeline <news_id>
+  - 單篇：python -m src.qa.verifier.pipeline <news_id.txt>
 """
 
 from __future__ import annotations
@@ -109,8 +109,8 @@ def _process_single(news_id: str, text: str) -> None:
     kb_block = '```\n[比對知識]\n' + '\n'.join(final) + '\n```'
 
     # 寫入檔案
-    kg_file = RES_DIR / f'news_kg_{news_id}.txt'
-    judge_file = RES_DIR / f'judge_result_{news_id}.txt'
+    kg_file = RES_DIR / f'news_kg_{news_id}'
+    judge_file = RES_DIR / f'judge_result_{news_id}'
     kg_file.write_text(f'{news_block}\n{kb_block}', encoding='utf-8')
 
     # 事實判斷
@@ -134,7 +134,7 @@ def main() -> None:
     args = _parse_args()
 
     if args.news_id:
-        input_path = USER_INPUT_DIR / f'{args.news_id}.txt'
+        input_path = USER_INPUT_DIR / f'{args.news_id}'
         if not input_path.is_file():
             sys.exit(f'❌ 找不到檔案：{input_path}')
         text = input_path.read_text(encoding='utf-8-sig').strip()
