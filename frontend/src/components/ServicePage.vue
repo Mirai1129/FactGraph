@@ -11,11 +11,15 @@ const tabResults = ref({
   writing: '',
   question: ''
 })
-const defaultMsg = '請輸入問題並點擊查詢，這裡會顯示答案。'
+const defaultMsg = '這裡會顯示辨識結果。'
 const result = ref(defaultMsg)
 const errorMessage = ref('')
 const isBouncing = ref(false)
 let errorTimeout = null
+
+const knowledgeResult = ref('這裡會顯示查詢到的對照知識。')
+// 折疊狀態
+const knowledgeCollapsed = ref(true)
 
 const datePicker = ref(null)
 
@@ -59,6 +63,9 @@ function validateAndQuery() {
   const output = `選擇的日期：${date.value}<br>你輸入的內容：${input.value}`
   result.value = output
   tabResults.value[tabType.value] = output
+
+  // 假設查詢到的知識內容
+  knowledgeResult.value = `查詢到的對照知識：<br>（這裡是知識內容展示區，請根據實際查詢結果填充）`;
 }
 
 function showError(msg) {
@@ -136,7 +143,19 @@ function showError(msg) {
       </div>
     </div> 
 
-    <div class="answer-card" v-html="result"></div>
+    <div class="answer-card" :class="{ default: result === defaultMsg }" v-html="result"></div>
+    <!-- 調整知識對照摺疊夾結構，讓外框包含在摺疊夾內 -->
+    <div class="knowledge-wrapper">
+      <button class="collapse-btn" @click="knowledgeCollapsed = !knowledgeCollapsed">
+        {{ knowledgeCollapsed ? '展開對照知識' : '收起對照知識' }}
+        <span class="triangle" :class="{ rotated: !knowledgeCollapsed }">
+          <svg width="18" height="18" viewBox="0 0 18 18"><polygon points="4,7 9,12 14,7" fill="#fff"/></svg>
+        </span>
+      </button>
+      <transition name="fade">
+        <div v-show="!knowledgeCollapsed" class="knowledge-card" :class="{ default: knowledgeResult === '這裡會顯示查詢到的對照知識。' }" v-html="knowledgeResult"></div>
+      </transition>
+    </div>
   </div>
 </template>
 
