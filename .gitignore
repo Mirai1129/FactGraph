@@ -223,6 +223,9 @@ models/CKIP/**
 # 2. 但保留所有子目錄結構（讓空資料夾也能出現在 repo 裡）
 !/data/**/
 
+# 允許追蹤 data 底下所有 .gitkeep（佔位檔）  
+!/data/**/.gitkeep
+
 # 3. 例外：保留這兩個檔案
 !/data/raw/knowledge-graph/neo4j-kg-raw-graph.csv
 !/data/processed/knowledge-graph/kg-triplet.emb.npy
