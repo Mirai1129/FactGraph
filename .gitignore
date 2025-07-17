@@ -209,12 +209,24 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-# Ignore large files
-models/
+# ─── 忽略 models 資料夾底下所有內容 ─────────────────
+models/*
+
+# ─── 但以下路徑例外（不忽略） ────────────────────────
+!models/CKIP/             # 保留 models/CKIP 資料夾
+!models/download_CKIP.py  # 保留這支 script
+
+# ─── 其他大型檔案格式照樣忽略 ────────────────────────
 *.npy
 *.h5
 *.pkl
 
-data/
-*.txt
-*.npy
+# ─── data 內容設置 ──────────────────────────
+data/*
+
+!data/interim/answerer/user-input/
+!data/interim/verifier/user-input/
+!data/processed/answerer/
+!data/processed/knowledge-graph/
+!data/processed/verifier/
+!data/raw/knowledge-graph/
