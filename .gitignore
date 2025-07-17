@@ -209,36 +209,25 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-# ─── 忽略 models 資料夾底下所有內容 ─────────────────
-models/**
-
-# ─── 但以下路徑例外（不忽略） ────────────────────────
-!models/CKIP/             # 保留 models/CKIP 資料夾
-/models/CKIP/**
-!models/download_CKIP.py  # 保留這支 script
+# ─── 忽略 models/CKIP 資料夾底下所有內容 ─────────────────
+models/CKIP/**
 
 # ─── 其他大型檔案格式照樣忽略 ────────────────────────
 *.npy
 *.h5
 *.pkl
 
-# ─── 只在 data/ 目錄下忽略 txt、npy、csv 文件 ─────────────────
+# ─── 在 data/ 下只忽略這三種副檔名 ───────────────────────
 /data/**/*.txt
 /data/**/*.npy
 /data/**/*.csv
 
+# ─── 例外：整顆資料夾都要保留（包含裡面所有檔案） ───────
+!/data/interim/answerer/user-input/
+!/data/interim/verifier/user-input/
+!/data/processed/answerer/
+!/data/processed/verifier/
+
 # ─── 但以下兩個檔案例外（不忽略） ───────────────────────
 !/data/raw/knowledge-graph/neo4j-kg-raw-graph.csv
 !/data/processed/knowledge-graph/kg-triplet.emb.npy
-
-# ─── 三、例外：保留這些整棵目錄及其內容 ────────────────
-# interim
-!data/interim/
-!data/interim/answerer/
-!data/interim/answerer/user-input/
-!data/interim/verifier/
-!data/interim/verifier/user-input/
-
-# processed
-!data/processed/answerer/
-!data/processed/verifier/
