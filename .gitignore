@@ -214,3 +214,7 @@ models/
 *.npy
 *.h5
 *.pkl
+
+data/
+*.txt
+*.npy
