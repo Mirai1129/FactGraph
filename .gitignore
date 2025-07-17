@@ -217,17 +217,12 @@ models/CKIP/**
 *.h5
 *.pkl
 
-# ─── 在 data/ 下只忽略這三種副檔名 ───────────────────────
-/data/**/*.txt
-/data/**/*.npy
-/data/**/*.csv
+# 1. 忽略 data 目錄底下所有內容（檔案與資料夾）
+/data/**
 
-# ─── 例外：整顆資料夾都要保留（包含裡面所有檔案） ───────
-!/data/interim/answerer/user-input/
-!/data/interim/verifier/user-input/
-!/data/processed/answerer/
-!/data/processed/verifier/
+# 2. 但保留所有子目錄結構（讓空資料夾也能出現在 repo 裡）
+!/data/**/
 
-# ─── 但以下兩個檔案例外（不忽略） ───────────────────────
+# 3. 例外：保留這兩個檔案
 !/data/raw/knowledge-graph/neo4j-kg-raw-graph.csv
 !/data/processed/knowledge-graph/kg-triplet.emb.npy
