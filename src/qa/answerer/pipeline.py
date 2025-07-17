@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 answerer ─ 問答主流程（Orchestrator）
 
@@ -16,6 +18,7 @@ from __future__ import annotations
 import os
 import sys
 import argparse
+import re
 from pathlib import Path
 from typing import List, Dict
 
@@ -42,48 +45,36 @@ from ..tools import data_utils as du
 
 # ───────────────────────────── 參數設定 ─────────────────────────
 SIM_TH: float = 0.80          # KG 相似度門檻
-TOP_K: int = 100              # 每個三元組取前 TOP_K 條
-
-# ---------------------------------------------------------------------------
-# 主流程
-# ---------------------------------------------------------------------------
+TOP_K: int   = 100            # 每個三元組取前 TOP_K 條
 
 def main() -> None:
-    """整個問答管線的入口函式，依命令列參數指定輸入檔案 <id>.txt。"""
-
-    # ========== 0. 解析指令參數 ==========
-    parser = argparse.ArgumentParser(description="Answerer pipeline: 指定問題檔案 <id>.txt 或相對路徑")
-    parser.add_argument(
-        "input_file", help="Path or filename of question file, e.g. '2024-...txt'"
-    )
+    parser = argparse.ArgumentParser(description="Answerer pipeline: 指定問題檔案 <id>.txt")
+    parser.add_argument("input_file", help="Path or filename of question file, e.g. '2024-...txt'")
     args = parser.parse_args()
 
-    # 嘗試直接讀取
+    # 讀取問題檔案
     input_path = Path(args.input_file)
-    # 若不存在，檢查 USER_INPUT_DIR 下直屬
     if not input_path.is_file():
         candidate = Path(USER_INPUT_DIR) / args.input_file
         if candidate.is_file():
             input_path = candidate
-    # 若仍不存在，遞迴搜尋 USER_INPUT_DIR
     if not input_path.is_file():
-        for path in Path(USER_INPUT_DIR).rglob(Path(args.input_file).name):
-            input_path = path
+        for p in Path(USER_INPUT_DIR).rglob(Path(args.input_file).name):
+            input_path = p
             break
     if not input_path.is_file():
         sys.exit(f"❌ 無效的輸入檔案: {args.input_file}")
 
-    # 取得問題內容與 slug
     question = input_path.read_text(encoding="utf-8").strip()
     slug = input_path.stem
     print(f"🔸 Question: {question}")
 
-    # ========== 1. 資源初始化 ==========
+    # 資源初始化
     emb = load_embedder(CKIP_ROOT)
     kg_vecs, kg_vecs_norm = load_kg_vectors(KG_EMB_PATH)
     kg_df, hp_col, rp_col, tp_col = load_kg_df(KG_CSV_PATH)
-    extract_prompt: str = load_prompt(EXTRACT_PROMPT_PATH)
-    judge_prompt: str = load_prompt(JUDGE_PROMPT_PATH)
+    extract_prompt = load_prompt(EXTRACT_PROMPT_PATH)
+    judge_prompt   = load_prompt(JUDGE_PROMPT_PATH)
     gpt = GPTClient(
         api_key=os.getenv("GPT_API"),
         model_id=os.getenv("GPT_MODEL", "gpt-4o"),
@@ -92,24 +83,36 @@ def main() -> None:
         max_tokens=2048,
     )
 
-    # ========== 2. 呼叫 GPT 抽取三元組 ==========
-    raw_resp: str = gpt.chat(extract_prompt, question)
+    # 2. 呼叫 GPT 抽取三元組
+    raw_resp = gpt.chat(extract_prompt, question)
     print("🪵 GPT raw response:\n", raw_resp)
-    cleaned = clean_json_block(raw_resp)
-    data = safe_json_loads(cleaned)
+
+    # 擷取 JSON block
+    block = clean_json_block(raw_resp)
+    # 移除所有反引號，並去掉可能的 "json" 前綴
+    cleaned = re.sub(r'^\s*json\s*', '', block, flags=re.IGNORECASE)
+    cleaned = cleaned.replace("`", "").strip()
+    print("🪵 Cleaned JSON block:\n", cleaned)
+
+    try:
+        data = safe_json_loads(cleaned)
+    except Exception as e:
+        print("[ERROR] 無法解析 JSON，cleaned 內容如下：", cleaned)
+        sys.exit("❌ GPT 回傳的內容不是合法 JSON，請檢查模型輸出與 prompt 設定")
+
     if isinstance(data, dict) and "triples" in data:
-        triples: List[Dict[str, str]] = [
-            {"head": t.get("subject"), "relation": t.get("relation"), "tail": t.get("object")}  # type: ignore
+        triples = [
+            {"head": t["subject"], "relation": t["relation"], "tail": t["object"]}
             for t in data["triples"]
             if t.get("subject") and t.get("relation")
         ]
     else:
-        triples = du.json_to_triples(data) or []  # type: ignore
+        triples = du.json_to_triples(data) or []
     print(f"🪲 Parsed triples count: {len(triples)}")
     if not triples:
         sys.exit("❌ GPT 未抽取到三元組")
 
-    # ========== 3. KG 向量檢索 ==========
+    # 3. KG 向量檢索
     raw_lines = search_by_triples(
         triples,
         embed_fn=lambda tp: embed_triple(emb, tp),
@@ -125,38 +128,40 @@ def main() -> None:
     if not raw_lines:
         sys.exit("⚠️ KG 無任何匹配")
 
-    # ========== 4. 語意去重（相似保留最長） ==========
+    # 4. 語意去重
     final_lines = dedupe(
         raw_lines,
         embed_fn=lambda ln: embed_text(emb, ln),
         threshold=0.80,
     )
 
-    # ========== 5. 依 slug 動態輸出 ==========
+    # 5. 輸出至檔案
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    kg_out: Path = OUT_DIR / f"user_kg_{slug}.txt"
-    judge_out: Path = OUT_DIR / f"user_qa_judge_{slug}.txt"
+    kg_out    = OUT_DIR / f"user_kg_{slug}.txt"
+    judge_out = OUT_DIR / f"user_qa_judge_{slug}.txt"
 
     kg_out.write_text(
-        "```\n[使用者提問]\n"
-        f"{question}\n```\n```\n[知識查詢結果]\n"
+        "[使用者提問]\n"
+        f"{question}\n\n[知識查詢結果]\n"
         + "\n".join(final_lines)
-        + "\n```",
+        + "\n",
         encoding="utf-8",
     )
 
-    # ========== 6. GPT 最終判斷 ==========
+    # 6. GPT 最終判斷
     judge_result = gpt.chat(judge_prompt, kg_out.read_text(encoding="utf-8-sig"))
+    # 移除所有反引號、井號與星號
+    judge_result = (judge_result
+        .replace("`", "")
+        .replace("#", "")
+        .replace("*", "")
+    )
     judge_out.write_text(judge_result, encoding="utf-8-sig")
 
     print("✅ finished; outputs saved under", OUT_DIR)
     print("   KG    →", kg_out.name)
     print("   JUDGE →", judge_out.name)
 
-
-# ---------------------------------------------------------------------------
-# CLI 執行
-# ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
     main()

@@ -53,7 +53,7 @@ def _pull_triples(text: str) -> List[du.Triple]:
             continue
 
         try:
-            triples = du.json_to_triples(json.loads(raw))
+            triples = du.json_to_triples(json.loads(raw.replace("`", "")))  # 移除 API 回傳中的所有反引號
             all_rounds.append(triples)
         except Exception as e:
             last_error = e
@@ -78,6 +78,9 @@ def _process_single(news_id: str, text: str) -> None:
     """
     RES_DIR.mkdir(parents=True, exist_ok=True)
     VEC_DIR.mkdir(parents=True, exist_ok=True)
+
+    # 移除輸入新聞中的所有反引號
+    text = text.replace("`", "")
 
     # 全文嵌入
     vec_path = VEC_DIR / f'{news_id}.npy'
@@ -104,18 +107,20 @@ def _process_single(news_id: str, text: str) -> None:
     kept = deduplicate(raw_lines)
     final = [re.sub(r'^\d+\.', f'[{i}]', ln, count=1) for i, ln in enumerate(kept, 1)]
 
-    # 組合輸出
-    news_block = f"```\n[原始新聞]\n{text}\n```"
-    kb_block = '```\n[比對知識]\n' + '\n'.join(final) + '\n```'
+    # 組合輸出（不加任何反引號圍欄）
+    news_block = "[原始新聞]\n" + text
+    kb_block   = "[比對知識]\n" + "\n".join(final)
 
-    # 寫入檔案
-    kg_file = RES_DIR / f'news_kg_{news_id}'
+    # 寫入結果檔案
+    kg_file    = RES_DIR / f'news_kg_{news_id}'
     judge_file = RES_DIR / f'judge_result_{news_id}'
-    kg_file.write_text(f'{news_block}\n{kb_block}', encoding='utf-8')
+    kg_file.write_text(f"{news_block}\n\n{kb_block}", encoding='utf-8')
 
     # 事實判斷
-    judged = judge_news_kb(f'{news_block}\n{kb_block}')
-    judge_file.write_text(judged, encoding='utf-8')
+    judged_raw = judge_news_kb(f"{news_block}\n\n{kb_block}")
+    # 移除判斷結果中的所有反引號
+    judged_clean = judged_raw.replace("`", "")
+    judge_file.write_text(judged_clean, encoding='utf-8')
 
     print(f'✅ 輸出：{kg_file.name}, {judge_file.name}')
 

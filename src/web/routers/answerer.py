@@ -61,11 +61,11 @@ async def query_verifier(file: UploadFile = File(...), date: str = Form(...)):
     judge_path = judge_matches[0]
     kg_path = kg_matches[0]
 
-    judge_result = judge_path.read_text(encoding="utf-8")
-    user_news_kg = kg_path.read_text(encoding="utf-8")
+    judge_result = judge_path.read_text(encoding="utf-8-sig")
+    user_news_kg = kg_path.read_text(encoding="utf-8-sig")
 
     # 刪除暫存輸入檔
-    input_path.unlink(missing_ok=True)
+    input_path.unlink(missing_ok=False) # True 是刪除檔案，False 是不刪除檔案。
 
     # 回傳判斷結果與知識內容
     return {"user_judge_result": judge_result, "user_news_kg": user_news_kg}
