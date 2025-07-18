@@ -5,6 +5,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from .routers import health, verifier, answerer
 from .deps import get_settings
 
+from .init_model import load_ckip_model
+print("📦 準備載入 CKIP 模型（不進行推論）...")
+ckip_model = load_ckip_model()  # ✅ 僅載入模型
+print("📦 模型準備完畢。")
+
 app = FastAPI(
     title="FactGraph API",
     version="0.1.0",
