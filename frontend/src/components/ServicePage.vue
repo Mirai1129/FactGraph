@@ -4,6 +4,9 @@ import { ref, onMounted, computed } from 'vue'
 import flatpickr from 'flatpickr'
 import 'flatpickr/dist/flatpickr.min.css'
 
+// 後端 API 根網址，優先從環境變數讀取，若未設定則使用預設的 App Engine URL
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://factgraph-38be7.uc.r.appspot.com'
+
 // 狀態管理
 const loading = ref(false)            // 是否正在載入狀態
 const tabType = ref('link')
@@ -52,6 +55,7 @@ function showError(msg) {
 
 // 驗證並呼叫 API
 async function validateAndQuery() {
+  // 點擊按鈕動畫效果
   isBouncing.value = true
   setTimeout(() => (isBouncing.value = false), 300)
 
@@ -59,6 +63,7 @@ async function validateAndQuery() {
   result.value = ''                  // 清空上次結果
   knowledgeResult.value = ''         // 清空對照知識
 
+  // 輸入與日期驗證
   if (!input.value) {
     loading.value = false
     return showError(
@@ -89,11 +94,16 @@ async function validateAndQuery() {
       : '/api/verifier/query'
 
   try {
-    const { data } = await axios.post(endpoint, form, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    })
+    // 使用完整的 BASE_URL + endpoint 呼叫後端，確保請求送到 App Engine
+    const { data } = await axios.post(
+      `${BASE_URL}${endpoint}`,
+      form,
+      {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      }
+    )
 
-    // 填入結果
+    // 根據分頁類型填入結果
     if (tabType.value === 'question') {
       result.value = data.user_judge_result || '沒有取得答案'
       knowledgeResult.value = data.user_news_kg || '沒有查到知識內容'

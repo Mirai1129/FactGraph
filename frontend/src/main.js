@@ -5,3 +5,8 @@ import App from './App.vue'
 // % yarn install
 // $ yarn run dev
 createApp(App).mount('#app')
+
+// 前端更新時，需要重新部署到 Firebase Hosting
+// % cd ~/dev/FactGraph/frontend
+// % yarn run build
+// % firebase deploy --only hosting
