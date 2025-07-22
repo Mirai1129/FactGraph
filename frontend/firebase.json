@@ -8,6 +8,15 @@
     ],
     "rewrites": [
       {
+        "_comment": "1️⃣ 當前端發出 /api/... 的請求時，直接轉給 factgraph-backend 這個 Cloud Run 服務",
+        "source": "/api/**",
+        "run": {
+          "serviceId": "factgraph-backend",
+          "region": "asia-southeast1"
+        }
+      },
+      {
+        "_comment": "2️⃣ 其他所有路徑都回傳 index.html，維持 SPA 路由",
         "source": "**",
         "destination": "/index.html"
       }

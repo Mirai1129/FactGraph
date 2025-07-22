@@ -22,7 +22,10 @@ async def query_verifier(file: UploadFile = File(...), date: str = Form(...)):
         text_content = content_bytes.decode("utf-8", errors="ignore")
 
     # 合併日期與文案
-    merged = f"新聞日期：{date}。{text_content}"
+    # 先把 datetime 物件格式化成 yyyy-mm-dd
+    iso_date = news_date.strftime("%Y-%m-%d")
+    # 再用 iso_date 組字串
+    merged = f"新聞日期：{iso_date}。{text_content}"
 
     # 設定專案根目錄與暫存路徑
     project_root = Path(__file__).resolve().parents[3]
@@ -65,7 +68,7 @@ async def query_verifier(file: UploadFile = File(...), date: str = Form(...)):
     news_kg = kg_path.read_text(encoding="utf-8")
 
     # 刪除暫存輸入檔
-    input_path.unlink(missing_ok=False) # True 是刪除檔案，False 是不刪除檔案。
+    input_path.unlink(missing_ok=True) # True 是刪除檔案，False 是不刪除檔案。
 
     # 回傳判斷結果與知識內容
     return {"judge_result": judge_result, "news_kg": news_kg}

@@ -1,0 +1,20 @@
+# 忽略 Python 快取與虛擬環境
+__pycache__/
+*.pyc
+venv/
+.env
+
+# 忽略 Git 與 CI 設定
+.git/
+.github/
+.gitignore
+
+# — 忽略前端程式
+frontend/
+dist/                # 前端 build output 放在這裡
+
+# 忽略其他本地產物
+*.log
+
+.yaml
+.gcloudignore
