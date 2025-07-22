@@ -1,166 +1,290 @@
-# FactGraph – 部署指南
+# FactGraph – 全端部署與快取最佳化 README
 
-新聞事實查核全端平台
-
-* **前端** Vue 3 ＋ Vite → **Firebase Hosting**
-* **後端** FastAPI（Docker 容器）→ **Cloud Run**
-* **映像倉庫** `gcr.io`（或區域 Artifact Registry，如 `asia‑southeast1-docker.pkg.dev`）
-
-> ⚠️  前後端請使用**相同區域**。若需 L4 GPU，本專案現階段使用新加坡區域 (`asia‑southeast1`)。
+> 新聞事實查核平台：**Vue 3 + Vite 前端（Firebase Hosting）**／**FastAPI 後端（Docker → Cloud Run）**／**Artifact Registry 映像與 Buildx 快取**。
+>
+> **目標**：冷啟動快、重建快、可追溯、可回滾、成本可控。
 
 ---
 
-## 1　前置準備
+## 0. 架構總覽
 
-| 工具 | 測試版本 | 用途 |
-|------|---------|------|
-| Docker CLI / Desktop | 24.x | 本地建置映像 |
-| Google Cloud CLI (`gcloud`) | 530.0.0 | 推送映像、部署 Cloud Run |
-| Firebase CLI | 14.x | 部署 Firebase Hosting |
-| Node 18 ＋ Yarn 1.x | 編譯 Vue 前端 |
-| Python 3.12（venv） | — | 後端開發與本地測試 |
+```
+[使用者瀏覽器]
+       │  HTTPS
+       ▼
+Firebase Hosting (CDN)
+       │  /api/** 透過 rewrite → Cloud Run
+       ▼
+Cloud Run (FastAPI 容器)
+       │  拉取映像 from Artifact Registry (同區)
+       ▼
+Artifact Registry (image & build cache)
+```
+
+* **區域統一**：全部採用 `asia-southeast1`（新加坡）。
+* **映像快取**：`docker buildx` + Artifact Registry 快取 repo，縮短 build 時間。
+* **不可變 Tag**：以時間或 Git SHA 命名，利於追蹤與回滾。
 
 ---
 
-## 2　專案結構（深度 = 2）
+## 1. 前置準備
+
+| 工具 / 服務                     | 建議版本     | 用途                   |
+| --------------------------- | -------- | -------------------- |
+| Docker CLI / Desktop        | 24.x↑    | 本地建置映像、啟用 Buildx     |
+| Google Cloud CLI (`gcloud`) | 530.0.0↑ | 建立 Repo、部署 Cloud Run |
+| Firebase CLI                | 14.x↑    | 部署 Firebase Hosting  |
+| Node.js 18.x + Yarn 1.x     | —        | 前端建置                 |
+| Python 3.12 + venv          | —        | 後端本地開發               |
+
+**GCP 權限**：用來部署的帳號需具備以下角色：
+
+* `roles/artifactregistry.admin`（初始化階段）
+* `roles/run.admin`
+* `roles/iam.serviceAccountUser`
+* Cloud Run 預設服務帳號需有 `roles/artifactregistry.reader`
+
+---
+
+## 2. 專案結構（深度 2 範例）
 
 ```bash
 $ tree -L 2
 .
 ├── Dockerfile
-├── frontend/
-│   ├── firebase.json
-│   └── vite.config.js
-├── models/            # CKIP 等大型模型 ~500 MB
+├── .dockerignore
+├── requirements_base.txt
+├── requirements_app.txt
+├── models/                  # CKIP 等大型模型 (~500MB)
+├── data/                    # 非必要請勿打包進映像
 ├── src/
-│   └── web/           # FastAPI 入口 main.py
-└── requirements.txt   # 由 `pip freeze` 產生
-````
+│   ├── web/                 # FastAPI 入口 main.py、│ │routers
+│   └── qa/                  # pipeline 與其他模組
+├── frontend/
+│   ├── firebase.json
+│   ├── vite.config.js
+│   └── src/
+└── scripts/                 # 可選：部署 / 清理腳本
+```
 
 ---
 
-## 3　後端：建置 → 推送 → 部署
-
-###  一次性「快取初始化」（只做一次）
-目的：把 所有階段 的 layer 快取（尤其是 pip 與 模型 那層）寫進 Artifact Registry，日後就能命中。
-
-1. 在 Artifact Registry 建一個專用快取 repo（建一次即可）。
+## 3. 共用環境變數（請先貼到你的 shell）
 
 ```bash
-gcloud artifacts repositories create buildcache \
+# ---- 基本參數 ----
+export PROJECT="factgraph-38be7"
+export REGION="asia-southeast1"
+
+# ---- Artifact Registry Repositories ----
+export REPO_IMG="factgraph-backend"   # 最終映像儲存庫
+export REPO_CACHE="buildcache"        # Buildx 快取儲存庫
+
+# ---- 產生不可變 Tag（時間戳） ----
+export TAG="$(date +%Y%m%d-%H%M)"
+
+# ---- 完整路徑 ----
+export IMAGE="$REGION-docker.pkg.dev/$PROJECT/$REPO_IMG/$REPO_IMG:$TAG"
+export CACHE_REF="$REGION-docker.pkg.dev/$PROJECT/$REPO_CACHE/backend"
+```
+
+> 之後每次 build 前只要重新 export `TAG`（或寫在 script）即可。
+
+---
+
+## 4. 一次性初始化（沒做過才跑）
+
+### 4.1 建立 Artifact Registry Repos（快取＆映像）
+
+```bash
+gcloud artifacts repositories create "$REPO_CACHE" \
   --repository-format=docker \
-  --location=asia-southeast1
+  --location="$REGION"
+
+gcloud artifacts repositories create "$REPO_IMG" \
+  --repository-format=docker \
+  --location="$REGION"
 ```
 
-2. 啟用 Docker 與 AR 的認證
+> 已存在會報錯，無視即可。
+
+### 4.2 Docker 登入 AR
 
 ```bash
-gcloud auth configure-docker asia-southeast1-docker.pkg.dev
+gcloud auth configure-docker "$REGION-docker.pkg.dev"
 ```
 
-3. 一次完整建置 + 把快取寫進 Registry
+### 4.3 建立並啟用 buildx builder（只需一次）
+
+```bash
+docker buildx create --name factgraphbx --driver docker-container --use
+docker buildx inspect --bootstrap
+```
+
+---
+
+## 5. 首次「暖快取」（完整建置並寫入快取）
+
+> 目的：把 pip / 模型等大層 layer 存進快取 repo，未來 build 時直接命中。
 
 ```bash
 docker buildx build \
-  --cache-to=type=registry,ref=asia-southeast1-docker.pkg.dev/factgraph-38be7/buildcache/backend,mode=max \
-  --tag asia-southeast1-docker.pkg.dev/factgraph-38be7/factgraph-backend/factgraph-backend:latest \
-  --push .                     
+  --file Dockerfile \
+  --platform linux/amd64 \
+  --cache-from=type=registry,ref="$CACHE_REF" \
+  --cache-to=type=registry,ref="$CACHE_REF",mode=max \
+  --tag "$IMAGE" \
+  --push \
+  --progress=plain .
 ```
--> 直接推，避免 --load 造成 digest 變動
-* mode=max ⇒ 連中間階段（Stage 1 pip install、模型層）都保存
 
-* 這是最後一次看到大型 layer 上傳；完成後 Registry 已擁有所有快取
+完成後：
 
-## 日常開發迭代
-### 3.1 本機 build & 測試（不推送）
+* AR 的 `buildcache/backend` 已保存所有中間層。
+* AR 的 `factgraph-backend` 儲存最新映像（tag = `$TAG`）。
+
+## 快速檢查
 ```bash
+export REGION="asia-southeast1"
+export PROJECT="factgraph-38be7"
+export REPO_IMG="factgraph-backend"
+gcloud artifacts docker images list \
+  "$REGION-docker.pkg.dev/$PROJECT/$REPO_IMG" \
+  --include-tags \
+  --format="table(TAGS,DIGEST,CREATE_TIME)"
+```
+---
+
+## 6. 日常開發迭代流程
+
+### 6.1 Build + Push（同時讀/寫快取）
+
+```bash
+export TAG="$(date +%Y%m%d-%H%M)"
+export IMAGE="$REGION-docker.pkg.dev/$PROJECT/$REPO_IMG/$REPO_IMG:$TAG"
+
 docker buildx build \
-  --cache-from=type=registry,ref=asia-southeast1-docker.pkg.dev/factgraph-38be7/buildcache/backend \
-  -t factgraph-backend:dev \
-  --output=type=docker .
-
-docker run --rm -p 8080:8080 factgraph-backend:dev
-# 測試 OK 後…
+  --file Dockerfile \
+  --platform linux/amd64 \
+  --cache-from=type=registry,ref="$CACHE_REF" \
+  --cache-to=type=registry,ref="$CACHE_REF",mode=min \
+  --tag "$IMAGE" \
+  --push \
+  --progress=plain .
 ```
-→ 只在本機執行 build，利用遠端快取跳過不變的層，把最終映像載入本地 daemon。
 
-→ 終端應出現 CACHED [deps 4/4] RUN pip install …，代表真的跳過重灌。
-
-### 3.2.A 給映像加上遠端路徑（如果 build 時已經用遠端 tag，這步可略）
-```bash
-docker tag factgraph-backend:dev \
-  asia-southeast1-docker.pkg.dev/factgraph-38be7/factgraph-backend/factgraph-backend:latest
-```
-* 把本地測試版打上遠端的 latest 標籤，準備推送。
-
-### 3.2.B 確定無誤後推送至 Artifact Registry（只傳增量 layer）
-```bash
-docker push asia-southeast1-docker.pkg.dev/factgraph-38be7/factgraph-backend/factgraph-backend:latest
-```
-docker push 只會上傳 Registry 未持有的 layer，因此先前已存在舊層會被跳過(大層直接 Layer already exists)，只傳當次新增或修改的部分。推送完成後，Console 的 Artifact Registry → Repositories → factgraph-backend 就能看到最新的 digest 與時間戳。
-
-### 3.3　部署到 Cloud Run
+> **不要用 `--output=type=docker`**，會多花數分鐘 export/unpack。
+>
+> 若需要本機測試：
 
 ```bash
-gcloud run deploy factgraph-backend \
-  --image=asia-southeast1-docker.pkg.dev/factgraph-38be7/factgraph-backend/factgraph-backend:latest \
-  --region=asia-southeast1 \
+docker pull "$IMAGE"
+docker run --rm -p 8080:8080 "$IMAGE"
+```
+
+---
+
+## 7. 部署到 Cloud Run
+### 7.1 尋找最新的 tag 
+```bash
+gcloud artifacts docker images list \
+  "$REGION-docker.pkg.dev/$PROJECT/$REPO_IMG" \
+  --include-tags \
+  --filter='TAGS!=""' \
+  --sort-by=~CREATE_TIME \
+  --limit=10 \
+  --format='table(CREATE_TIME, TAGS, DIGEST)'
+```
+### 7.2.A TAG 及 IMAGE 設置
+```bash
+# 先補上 tag
+export TAG="<補上查詢到最新的 tag>"
+
+# 組出完整 IMAGE
+export IMAGE="$REGION-docker.pkg.dev/$PROJECT/$REPO_IMG/$REPO_IMG:$TAG"
+
+# 確認一下
+echo "$IMAGE"
+```
+
+### 7.2.B 如何補 TAG ? (如果之前的步驟忘記上 TAG)
+```bash
+# 先查最新的 DIGEST
+gcloud artifacts docker images list   "$REGION-docker.pkg.dev/$PROJECT/$REPO_IMG"   --include-tags   --filter='TAGS!=""'   --sort-by=~CREATE_TIME   --limit=10   --format='table(CREATE_TIME, TAGS, DIGEST)'
+
+# 設定最新的 DIGEST
+export DIGEST="sha256:153680956a35e591406758d2e005a3ccae2abac2c0e865bd0404a5e3c4dc59b6"
+
+# 再設定要補上的 tag
+export TAG="$(date +%Y%m%d-%H%M)"
+
+# 確認一下
+echo "$DIGES"
+echo "$TAG"
+
+# 最後就成功的幫 DIGEST 補上 TAG
+gcloud artifacts docker tags add \
+  "$REGION-docker.pkg.dev/$PROJECT/$REPO_IMG/$REPO_IMG@$DIGEST" \
+  "$REGION-docker.pkg.dev/$PROJECT/$REPO_IMG/$REPO_IMG:$TAG"
+```
+
+### 7.3 執行部署
+```bash
+gcloud run deploy "$REPO_IMG" \
+  --image="$IMAGE" \
+  --region="$REGION" \
   --platform=managed \
   --cpu=8 \
   --memory=16Gi \
-  --concurrency=80 \
+  --concurrency=40 \
   --timeout=900 \
+  --min-instances=1 \
+  --max-instances=3 \
   --allow-unauthenticated
 ```
-參數都可以自行調整，我會簡單部署後，再到網頁進行部署一次，設定詳細配置。
 
-（於 Cloud Console → Cloud Run → **Deploy** 圖形介面操作）
-
-### 3.4　確認服務狀態
-
-```bash
-gcloud run services list --platform managed --region asia-southeast1
-```
-
-### 3.5　快取機制與快速重建
-
-Dockerfile 將龐大檔案（模型、依賴）置於第一層，未改動 `requirements.txt` 或 `models/` 時，Cloud Build 會使用快取，只重新打包程式碼層，通常 1 分鐘內完成。
-
-### 3.6　更新既有服務
-
-```bash
-gcloud builds submit --tag gcr.io/$GOOGLE_CLOUD_PROJECT/factgraph-backend:latest .
-gcloud run deploy factgraph-backend --image gcr.io/$GOOGLE_CLOUD_PROJECT/factgraph-backend:latest ...
-```
-
-（或於 Cloud Run 介面點 **Deploy Revision**）
+> 參數請依實測調整。`min-instances=1` 可避免冷啟動；`max-instances` 控制成本。
 
 ---
 
-## 4　後端 CORS 設定
+## 8. 部署後驗證與回滾
 
-`src/web/main.py`：將 Firebase Hosting 網域加入 `origins`，避免瀏覽器阻擋跨域。
+```bash
+# 列出服務
+gcloud run services list --platform managed --region "$REGION"
 
-```python
-origins = [
-    "http://localhost:8080",
-    "http://localhost:5173",
-    "https://factgraph-38be7.web.app",  # Firebase Hosting 網址
-]
+# 列出 revisions（確認新 digest）
+gcloud run revisions list --service "$REPO_IMG" --region "$REGION"
+
+# 健康檢查（假設 /health endpoint）
+SERVICE_URL=$(gcloud run services describe "$REPO_IMG" --region "$REGION" --format='value(status.url)')
+curl -I "$SERVICE_URL/health"
+```
+
+### 回滾至舊版
+
+```bash
+# 找到想回滾的 revision 名稱
+gcloud run revisions list --service "$REPO_IMG" --region "$REGION"
+
+# 將 100% 流量切到舊 revision
+gcloud run services update-traffic "$REPO_IMG" \
+  --region "$REGION" \
+  --to-revisions REVISION_NAME=100
 ```
 
 ---
 
-## 5　前端：建置與部署 Firebase Hosting
+## 9. 前端：Firebase Hosting 部署
 
-### 5.1　設定 `frontend/firebase.json`
+### 9.1 `frontend/firebase.json`
 
 ```jsonc
 {
   "hosting": {
     "public": "dist",
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
-    "region": "asia-southeast1",          // 與 Cloud Run 同區
+    "region": "asia-southeast1",
     "rewrites": [
       {
         "source": "/api/**",
@@ -175,60 +299,135 @@ origins = [
 }
 ```
 
-### 5.2　建置與部署
+> 若你用的是較老的 Firebase CLI 或不支援 `run`，請改用 GAE Proxy 或直接在前端寫死 Cloud Run URL。
+
+### 9.2 建置與部署
 
 ```bash
-cd ~/dev/FactGraph/frontend
-yarn install          # 初次執行
-yarn build            # 生成 dist/
+cd frontend
+yarn install       # 首次
+yarn build         # 產生 dist/
 firebase deploy --only hosting
 ```
 
 ---
 
-## 6　區域搬遷檢查表
+## 10. FastAPI CORS 設定（後端）
 
-1. Artifact Registry 標籤 → `asia-southeast1-docker.pkg.dev/...`
-2. Cloud Run `--region` → `asia-southeast1`
-3. `firebase.json` `"region"` → `asia-southeast1`
-4. CORS 網域無需修改（`*.web.app` 不變）
+`src/web/main.py`：
 
----
+```python
+origins = [
+    "http://localhost:5173",            # Vite dev
+    "http://localhost:8080",            # 其他本機測試
+    "https://factgraph-38be7.web.app",  # Firebase Hosting
+]
+```
 
-## 7　本地除錯
-
-| 功能              | 指令                                                      |
-| --------------- | ------------------------------------------------------- |
-| 啟動後端熱重載         | `uvicorn src.web.main:app --reload`                     |
-| 模擬 Hosting + 重寫 | `firebase serve --only hosting`                         |
-| 測試 API          | `curl -X POST http://127.0.0.1:8000/api/answerer/query` |
+> 若你在其他網域測試，記得補上；或採用萬用 `"*"`（不建議正式環境）。
 
 ---
 
-## 8　疑難排解
+## 11. Dockerfile / .dockerignore 最佳實務
 
-| 現象                | 可能原因                           | 解法                          |
-| ----------------- | ------------------------------ | --------------------------- |
-| Swagger UI 一直轉圈   | Cloud Run 冷啟動或 CORS 未放行        | 查看日誌、確認 `origins`           |
-| `docker build` 超久 | 快取失效（改了 requirements / models） | 確認多階段設計，將大檔案固定在同層           |
-| `/api/...` 404    | `firebase.json` 重寫錯誤           | 檢查 `"run"` 區塊與 serviceId    |
-| 模型太大無法推 Git       | 可用 Git LFS 或改放 GCS             | `.gitignore` 忽略模型；部署時掛載 GCS |
+### Dockerfile（關鍵：層次穩定）
+
+```dockerfile
+# Stage: py-base
+FROM python:3.12.3-slim AS py-base
+WORKDIR /opt/app
+COPY requirements_base.txt .
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -r requirements_base.txt
+
+# Stage: deps
+FROM py-base AS deps
+WORKDIR /opt/app
+COPY requirements_app.txt .
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -r requirements_app.txt
+
+# Stage: runtime
+FROM nvidia/cuda:12.6.2-cudnn-runtime-ubuntu22.04 AS runtime
+WORKDIR /app
+COPY --from=deps /usr/local /usr/local
+COPY models/ /app/models           # 大模型層（不常改）
+COPY src/    /app/src              # 程式碼層（最常改）
+COPY data/   /app/data             # 若必要才放入
+CMD ["python", "-m", "src.web.main"]
+```
+
+### `.dockerignore`
+
+```gitignore
+.git/
+**/__pycache__/
+*.pyc
+venv/
+.env*
+# 不要把暫存資料塞進映像
+/data/interim/
+/data/processed/
+/logs/
+```
 
 ---
 
-## 9　常用指令
+## 12. 疑難排解速查表
+
+| 現象              | 可能原因                                         | 快速檢查                      | 解法                                              |
+| --------------- | -------------------------------------------- | ------------------------- | ----------------------------------------------- |
+| build 超慢（pip 層） | 沒寫入/讀到快取、requirements 調整                     | log 無 `CACHED`            | 加 `--cache-to`，調整 Dockerfile COPY 順序            |
+| push 重傳大層       | digest 改變（層順序、時間戳）、使用 `--output=type=docker` | push log 顯示重新上傳           | build 時 `--push`，避免多次 tag/push                  |
+| Cloud Run 冷啟動慢  | `min-instances=0`                            | 首次請求很慢                    | 設 `--min-instances=1`，或用 Cloud Run jobs 預熱      |
+| Swagger UI 轉圈圈  | CORS 未放行、服務還沒啟動好                             | 瀏覽器 console/network       | 加入正確 origins、檢查 Cloud Run logs                  |
+| `/api/...` 404  | Firebase rewrite 設錯                          | Firebase Hosting logs     | 檢查 `firebase.json` 中 `run.serviceId` / `region` |
+| 回滾困難            | always 使用 `latest`                           | revisions list 找不到 digest | 改用不可變 tag，部署時指定 digest 或 tag                    |
+
+---
+
+## 13. 清理與成本控制
 
 ```bash
-# 列出映像標籤
-gcloud artifacts docker images list gcr.io/$PROJECT_ID/factgraph-backend
+# 本地 buildx cache 狀況
+docker buildx du
+# 清本地 cache
+docker buildx prune --all --force
 
-# 列出本地 Docker 映像
-docker image list
+# 列出遠端映像
+gcloud artifacts docker images list "$REGION-docker.pkg.dev/$PROJECT/$REPO_IMG" --include-tags
+# 刪除舊 digest
+gcloud artifacts docker images delete \
+  "$REGION-docker.pkg.dev/$PROJECT/$REPO_IMG/$REPO_IMG@sha256:<digest>" --quiet
+```
 
-# 查看 Cloud Run 日誌
-gcloud logs read \
-  "resource.type=cloud_run_revision AND resource.labels.service_name=factgraph-backend" \
-  --limit 50
+> 可在 Artifact Registry 設定保留策略（Lifecycle Policy）自動刪除舊 image / cache。
 
-# 將流量切至最新修訂，刪舊版
-gcloud run services update-traffic factgraph-backend --to-latest
+---
+
+## 14. 延伸：不用 Docker 可以嗎？
+
+* **Cloud Run 需要容器**。若不想自己打包 Docker，可考慮 Cloud Run Source Deploy + Buildpacks，但大檔模型仍是瓶頸。
+* 模型可放 GCS，容器啟動時載入（加快 build；啟動時間可能變慢）。
+* 若要更細粒度更新，可拆多個服務 / 微服務，減少單個 image 體積。
+---
+## 15. FAQ
+
+**Q：為什麼我明明加了 `--cache-from` 還是沒有 CACHED？**
+A：你前一次 build 沒有 `--cache-to` 寫入快取、或 Dockerfile COPY 順序導致層被破壞、或快取 repo 被清除。
+
+**Q：一定要用不可變 tag 嗎？**
+A：不是硬性規定，但沒有會很痛。debug、rollback、比對版本都麻煩。
+
+**Q：Dockerfile 裡要不要用 `--mount=type=cache,target=/root/.cache/pip`？**
+A：建議用，可加速同一次 build 或同 builder 的 pip 安裝，但跨機器仍需 registry cache。
+
+**Q：大型模型與依賴要怎麼處理？**
+A：放在前層、盡量不變。或拆成 base image；或放 GCS 啟動時下載。
+
+**Q：為什麼 `docker push` 還是重新上傳大層？**
+A：Digest 改變（層順序移動、檔案 timestamp 改變、`--output=type=docker` 重新打包）。**盡量 build 時就 `--push`。**
+
+---
+
+> **結束語**：以上流程能確保你每次只重建「真正改動的層」，並且部署可追溯、可回滾。若你要改 Cloud Build / GitHub Actions CI/CD、自動跑測試，也可沿用同樣的 cache 策略。
