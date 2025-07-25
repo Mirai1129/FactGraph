@@ -94,9 +94,9 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { useRoute }                from 'vue-router'
-import { db }                      from '../firebase'
-import { doc, onSnapshot }         from 'firebase/firestore'
+import { useRoute }            from 'vue-router'
+import { db }                  from '../firebase'
+import { doc, onSnapshot }     from 'firebase/firestore'
 
 // 取路由上的 jobId
 const route  = useRoute()
@@ -153,13 +153,28 @@ onMounted(() => {
         return
       }
 
-      // 還在跑
+      // 還在跑，保持 loading
       if (data.status !== 'DONE') {
         loading.value = true
         return
       }
 
-      // 完成：把結果寫進各自欄位
+      // ✅ DONE 狀態，先判斷有無回答
+      const noAnswer = data.mode === 'writing'
+        ? (!data.writingAnswer && !data.writingKnowledge)
+        : (!data.questionAnswer && !data.questionKnowledge)
+
+      if (noAnswer) {
+        alert(
+          '📢 芒狗通知您 🐶\n' +
+          '目前這個問題沒有足夠的知識可以匹配📚\n請換個問法或問題再試一次🔁！'
+        )
+        // 跳回原頁面（覆蓋式）
+        window.location.replace('https://factgraph-38be7.web.app/')
+        return
+      }
+
+      // ✅ 真有結果，關閉 loading，並寫入欄位
       loading.value = false
       answerWriting.value     = data.writingAnswer     || defaultMsg
       knowledgeWriting.value  = data.writingKnowledge  || defaultKnowledgeMsg

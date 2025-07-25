@@ -69,7 +69,7 @@ def process_task(job_id: str, url: str, mode: str, date: str):
     doc_ref = db.collection("url-results").document(job_id)
     doc_ref.update({"status": "RUNNING"})
     try:
-        # 診斷日志
+        # 診斷日誌
         print(f"[process_task] job_id={job_id}, mode={mode}, date={date}")
         files = {"file": ("user.txt", url, "text/plain")}
         data = {"date": date}

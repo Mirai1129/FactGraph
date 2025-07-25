@@ -1,4 +1,3 @@
-<!-- frontend/src/components/ServicePage.vue -->
 <template>
   <div class="error-message" :class="{ show: errorMessage }" v-if="errorMessage">
     {{ errorMessage }}
@@ -66,7 +65,7 @@
           :class="{ bounce: isBouncing }"
           @click="validateAndQuery"
         >
-          開始查核
+          {{ loading ? '調查中…' : '開始查核' }}
         </button>
       </div>
     </div>
@@ -75,7 +74,7 @@
     <div class="answer-card" :class="{ default: !loading && result === defaultMsg }">
       <template v-if="loading">
         <div class="loading-spinner"></div>
-        <p class="loading-text">調查中… 請等候30~60秒…</p>
+        <p class="loading-text">芒狗調查中… 請稍候</p>
       </template>
       <template v-else>
         <div v-html="result"></div>
@@ -98,7 +97,7 @@
         >
           <template v-if="loading">
             <div class="loading-spinner"></div>
-            <p class="loading-text">調查中… 請等候30~60秒…</p>
+            <p class="loading-text">芒狗調查中… 請稍候</p>
           </template>
           <template v-else>
             <div v-html="knowledgeResult"></div>
@@ -126,8 +125,10 @@ import axios from 'axios'
 import { ref, onMounted, computed } from 'vue'
 import flatpickr from 'flatpickr'
 import 'flatpickr/dist/flatpickr.min.css'
+import { getAuth, signInAnonymously } from 'firebase/auth'
+import { db } from '../firebase'
+import { doc, onSnapshot } from 'firebase/firestore'
 
-// 後端 API 根網址（如需跨域部署，可填入 https://your-domain.com）
 const BASE_URL = ''
 
 // -------------------------
@@ -148,7 +149,8 @@ let errorTimeout = null
 
 // 臨時網址 & 複製功能
 const showUrlModal = ref(false)
-const tempUrl      = ref('')
+const tempUrl = ref('')
+let unsubscribe = null
 
 function copyUrl() {
   navigator.clipboard.writeText(tempUrl.value)
@@ -161,8 +163,8 @@ const datePlaceholder = computed(() =>
   tabType.value === 'question' ? '選擇事件詢問日期' : '選擇新聞發布日期'
 )
 
-// 初始化 flatpickr
-onMounted(() => {
+// 初始化 flatpickr & 匿名登入
+onMounted(async () => {
   flatpickr(document.querySelector('.date-input'), {
     dateFormat: 'Y/m/d',
     defaultDate: date.value,
@@ -171,10 +173,19 @@ onMounted(() => {
     disableMobile: true,
     onChange: (_, dateStr) => (date.value = dateStr)
   })
+
+  try {
+    const auth = getAuth()
+    await signInAnonymously(auth)
+    console.log('Firebase 已匿名登入，UID =', auth.currentUser.uid)
+  } catch (err) {
+    console.error('匿名登入失敗', err)
+    showError('無法完成匿名登入，請稍後再試')
+  }
 })
 
 // 分頁切換
-function switchTab (type) {
+function switchTab(type) {
   tabType.value = type
   input.value = ''
   date.value = ''
@@ -183,14 +194,14 @@ function switchTab (type) {
 }
 
 // 顯示錯誤
-function showError (msg) {
+function showError(msg) {
   errorMessage.value = msg
   clearTimeout(errorTimeout)
   errorTimeout = setTimeout(() => (errorMessage.value = ''), 2000)
 }
 
-// 驗證並呼叫 API
-async function validateAndQuery () {
+// 驗證並呼叫 API + onSnapshot 處理結果
+async function validateAndQuery() {
   isBouncing.value = true
   setTimeout(() => (isBouncing.value = false), 300)
 
@@ -205,17 +216,21 @@ async function validateAndQuery () {
   result.value = ''
   knowledgeResult.value = ''
 
-  // —— 1. 呼叫 /api/tasks，帶入 url、mode、date —— 
+  // 清除舊訂閱，並把 unsubscribe 設為 null（避免殘留）
+  if (unsubscribe) {
+    unsubscribe()
+    unsubscribe = null
+  }
+
+  // 1. 呼叫 /api/tasks
+  let taskId
   try {
     const { data: task } = await axios.post(
       `${BASE_URL}/api/tasks`,
-      {
-        url: input.value,
-        mode: tabType.value,     // "writing" 或 "question"
-        date: date.value         // "YYYY/MM/DD"
-      }
+      { url: input.value, mode: tabType.value, date: date.value }
     )
-    tempUrl.value    = `${window.location.origin}/tasks/${task.id}`
+    taskId = task.id
+    tempUrl.value = `${window.location.origin}/tasks/${taskId}`
     showUrlModal.value = true
   } catch (e) {
     console.error('建立臨時任務失敗', e)
@@ -224,32 +239,57 @@ async function validateAndQuery () {
     return
   }
 
-  // —— 2. 原有上傳 form & 查詢流程 —— 
-  const form = new FormData()
-  form.append('file', new Blob([input.value], { type: 'text/plain' }), 'user.txt')
-  form.append('date', date.value)
+  // 2. 訂閱 Firestore 任務文件
+  const docRef = doc(db, 'url-results', taskId)
+  unsubscribe = onSnapshot(
+    docRef,
+    snap => {
+      console.log('[onSnapshot] got snapshot', snap.exists(), snap.data())
+      if (!snap.exists()) return
 
-  const endpoint =
-    tabType.value === 'question' ? '/api/answerer/query' : '/api/verifier/query'
+      const data = snap.data()
 
-  try {
-    const { data } = await axios.post(`${BASE_URL}${endpoint}`, form, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    })
+      // 1️⃣ 如果後端傳回 502，直接跳到臨時網址
+      if (data.error?.code === 502) {
+        window.location.href = tempUrl.value
+        return
+      }
 
-    if (tabType.value === 'question') {
-      result.value = data.user_judge_result || '沒有取得答案'
-      knowledgeResult.value = data.user_news_kg || '沒有查到知識內容'
-    } else {
-      result.value = data.judge_result || '沒有取得答案'
-      knowledgeResult.value = data.news_kg || '沒有查到知識內容'
+      // 2️⃣ 只要還沒真正跑完（PENDING / RUNNING），先不做任何處理
+      if (data.status !== 'DONE') {
+        return
+      }
+
+      // 到這裡就是 status === 'DONE'，才能判斷「查無結果」或「顯示結果」
+      const noAnswer = tabType.value === 'question'
+        ? !data.questionAnswer && !data.questionKnowledge
+        : !data.writingAnswer  && !data.writingKnowledge
+
+      if (noAnswer) {
+        alert('📢 芒狗通知您 🐶\n目前這個問題沒有足夠的知識可以匹配📚\n請換個問法或問題再試一次🔁！')
+        // 情境1：真正查無就 reload
+        location.reload()
+        return
+      }
+
+      // 5️⃣ 有答案，顯示結果並取消訂閱
+      if (tabType.value === 'question') {
+        result.value        = data.questionAnswer   || defaultMsg
+        knowledgeResult.value = data.questionKnowledge || defaultKnowledgeMsg
+      } else {
+        result.value        = data.writingAnswer   || defaultMsg
+        knowledgeResult.value = data.writingKnowledge || defaultKnowledgeMsg
+      }
+
+      loading.value = false
+      unsubscribe?.()
+    },
+    err => {
+      console.error('[onSnapshot] got error', err)
+      showError('無法連線至 Firestore，請稍後重試')
+      // 保持 loading=true
     }
-  } catch (err) {
-    console.error(err)
-    showError('查詢失敗：' + (err.response?.data.detail || err.message))
-  } finally {
-    loading.value = false
-  }
+  )
 }
 </script>
 
