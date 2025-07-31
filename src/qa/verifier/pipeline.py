@@ -11,26 +11,25 @@
 from __future__ import annotations
 
 import argparse
+import gc
 import json
 import re
 import sys
 import time
-import gc
-from pathlib import Path
 from typing import List
 
 import numpy as np
 from tqdm import tqdm
 
-from ..tools import data_utils as du
-from ..tools import kg_nl as knl
-from .core.paths import USER_INPUT_DIR, VEC_DIR, RES_DIR
 from .core.config import LLM_ROUNDS
+from .core.dedup import deduplicate
 from .core.embeddings import embed_text, embed_triple
+from .core.paths import USER_INPUT_DIR, VEC_DIR, RES_DIR
 from .kg.search import cosine_search, kg_row_to_detail
 from .llm.extract import extract_entities_relations
 from .llm.judge import judge_news_kb
-from .core.dedup import deduplicate
+from ..tools import data_utils as du
+from ..tools import kg_nl as knl
 
 
 def _pull_triples(text: str) -> List[du.Triple]:
@@ -42,14 +41,14 @@ def _pull_triples(text: str) -> List[du.Triple]:
     last_error: Exception | None = None
 
     for i in range(LLM_ROUNDS):
-        print(f'🔸 GPT 抽取 round {i+1}')
+        print(f'🔸 GPT 抽取 round {i + 1}')
         start = time.time()
         raw = extract_entities_relations(text)
         elapsed = time.time() - start
         print(f'  ↳ 完成，用時 {elapsed:.1f}s')
 
         if not raw:
-            print(f'[WARN] 抽取回傳為空，跳過 round {i+1}')
+            print(f'[WARN] 抽取回傳為空，跳過 round {i + 1}')
             continue
 
         try:
@@ -57,7 +56,7 @@ def _pull_triples(text: str) -> List[du.Triple]:
             all_rounds.append(triples)
         except Exception as e:
             last_error = e
-            print(f'[WARN] JSON 解析失敗於 round {i+1}: {e}')
+            print(f'[WARN] JSON 解析失敗於 round {i + 1}: {e}')
 
     if not all_rounds:
         if last_error:
@@ -109,10 +108,10 @@ def _process_single(news_id: str, text: str) -> None:
 
     # 組合輸出（不加任何反引號圍欄）
     news_block = "[原始新聞]\n" + text
-    kb_block   = "[比對知識]\n" + "\n".join(final)
+    kb_block = "[比對知識]\n" + "\n".join(final)
 
     # 寫入結果檔案
-    kg_file    = RES_DIR / f'news_kg_{news_id}'
+    kg_file = RES_DIR / f'news_kg_{news_id}'
     judge_file = RES_DIR / f'judge_result_{news_id}'
     kg_file.write_text(f"{news_block}\n\n{kb_block}", encoding='utf-8')
 
