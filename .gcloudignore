@@ -55,3 +55,7 @@ frontend/
 .DS_Store
 
 src/web/key/
+
+src/crawler/
+
+src/knowledge_base_operation/

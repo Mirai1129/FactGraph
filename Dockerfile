@@ -13,7 +13,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:${PATH}"
 
-# 系統依賴（若真的需要再裝）
+# 系統依賴
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git curl \
  && rm -rf /var/lib/apt/lists/*
@@ -44,7 +44,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # 複製 venv
 COPY --from=base /opt/venv /opt/venv
 
-# rarely changed (模型、靜態資源) ─ 若不存在請移除這兩行
+# rarely changed (模型、靜態資源)
 COPY models/ /app/models
 COPY data/   /app/data
 

@@ -1,8 +1,3 @@
-# Decompiled with PyLingual (https://pylingual.io)
-# Internal filename: /home/karca5103/dev/FactGraph/src/factgraph/kg/transformation.py
-# Bytecode version: 3.12.0rc2 (3531)
-# Source timestamp: 2025-04-16 07:26:55 UTC (1744788415)
-
 """
 Transformation Module
 

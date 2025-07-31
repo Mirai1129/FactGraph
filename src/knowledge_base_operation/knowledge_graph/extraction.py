@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Extraction Module (GPT 版本)
 
@@ -38,7 +36,7 @@ openai.api_key = GPT_API_KEY
 # 參數設定
 DEFAULT_TEMPERATURE: float = 0.2
 MAX_TOKENS: int = 4096
-DEFAULT_PROMPT_FILE: str = 'prompts/extraction-prompt.txt'
+DEFAULT_PROMPT_FILE: str = 'src/knowledge_graph/prompts/extraction-prompt.txt'
 
 
 def get_default_prompt(prompt_file: str = DEFAULT_PROMPT_FILE) -> str:
