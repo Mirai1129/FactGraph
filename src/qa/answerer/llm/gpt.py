@@ -4,9 +4,13 @@
 # Source timestamp: 2025-07-01 14:12:47 UTC (1751379167)
 
 from __future__ import annotations
+
 import time
+
 from openai import OpenAI, OpenAIError, APITimeoutError
+
 __all__ = ['GPTClient']
+
 
 class GPTClient:
 
@@ -18,7 +22,9 @@ class GPTClient:
         backoff = 5
         while True:
             try:
-                resp = self._client.chat.completions.create(messages=[{'role': 'system', 'content': system_prompt}, {'role': 'user', 'content': user_prompt}], **self._base_kwargs)
+                resp = self._client.chat.completions.create(
+                    messages=[{'role': 'system', 'content': system_prompt}, {'role': 'user', 'content': user_prompt}],
+                    **self._base_kwargs)
                 return resp.choices[0].message.content.strip()
             except (OpenAIError, APITimeoutError) as err:
                 print(f'[WARN] GPT retry in {backoff}s → {err}')

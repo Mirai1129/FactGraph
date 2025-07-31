@@ -7,6 +7,7 @@ Configuration and Connection Module
 """
 
 import os
+
 from dotenv import load_dotenv
 from neo4j import GraphDatabase
 from pymongo import MongoClient
@@ -29,13 +30,13 @@ NEO4J_CONFIG = {
 # --------------------------
 LM_STUDIO_CONFIG = {
     "endpoint": os.getenv("MODEL_CONFIG_endpoint"),  # LM Studio API 路徑
-    "model_id": os.getenv("MODEL_ID"),               # 使用的模型 ID
-    "temperature": 0.1,                              # 降低溫度以提升確定性
-    "max_tokens": 12288,                              # 最大生成字數
-    "top_k": 40,                                     # 限制詞彙選擇範圍
-    "top_p": 0.9,                                    # 控制選擇詞的機率範圍
-    "min_p": 0.07,                                   # 保留一定機率的低頻詞
-    "repeat_penalty": 1.1,                           # 避免重複產生相同詞彙
+    "model_id": os.getenv("MODEL_ID"),  # 使用的模型 ID
+    "temperature": 0.1,  # 降低溫度以提升確定性
+    "max_tokens": 12288,  # 最大生成字數
+    "top_k": 40,  # 限制詞彙選擇範圍
+    "top_p": 0.9,  # 控制選擇詞的機率範圍
+    "min_p": 0.07,  # 保留一定機率的低頻詞
+    "repeat_penalty": 1.1,  # 避免重複產生相同詞彙
 }
 
 print(f"Loadded Database: {NEO4J_CONFIG['database']}")

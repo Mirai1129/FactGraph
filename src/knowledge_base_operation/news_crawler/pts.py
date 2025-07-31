@@ -14,13 +14,12 @@ PTS (公視) 文章爬蟲
 from __future__ import annotations
 
 import json
-import os
 import re
 import time
 from datetime import datetime
 from hashlib import md5
 from pathlib import Path
-from typing import Iterable, List, Optional
+from typing import List, Optional
 from zoneinfo import ZoneInfo
 
 import requests
@@ -29,7 +28,7 @@ from bs4 import BeautifulSoup
 # ──────────────────────────────
 # 參數／常數
 # ──────────────────────────────
-KEYWORD: str = "京華城"                     # 如需關鍵字過濾，可自行使用
+KEYWORD: str = "京華城"  # 如需關鍵字過濾，可自行使用
 BASE_URL: str = "https://news.pts.org.tw"
 SEARCH_URL: str = f"{BASE_URL}/category/1?page={{}}"
 
@@ -218,7 +217,7 @@ def scrape_pts(max_pages: int = MAX_PAGES) -> None:
     print("輸出檔案：", out_path.resolve())
     print(f"共 {len(results)} 筆文章")
     print("結束時間:", end.strftime("%Y-%m-%d %H:%M:%S"))
-    print(f"耗時 { (end - start).total_seconds():.1f} 秒")
+    print(f"耗時 {(end - start).total_seconds():.1f} 秒")
 
 
 if __name__ == "__main__":

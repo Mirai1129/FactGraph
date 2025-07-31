@@ -1,10 +1,12 @@
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException
-from pathlib import Path
-from datetime import datetime
-from zoneinfo import ZoneInfo
 import subprocess
+from datetime import datetime
+from pathlib import Path
+from zoneinfo import ZoneInfo
+
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 
 router = APIRouter(prefix="/verifier", tags=["verifier"])
+
 
 @router.post("/query")
 async def query_verifier(file: UploadFile = File(...), date: str = Form(...)):
@@ -68,7 +70,7 @@ async def query_verifier(file: UploadFile = File(...), date: str = Form(...)):
     news_kg = kg_path.read_text(encoding="utf-8")
 
     # 刪除暫存輸入檔
-    input_path.unlink(missing_ok=True) # True 是刪除檔案，False 是不刪除檔案。
+    input_path.unlink(missing_ok=True)  # True 是刪除檔案，False 是不刪除檔案。
 
     # 回傳判斷結果與知識內容
     return {"judge_result": judge_result, "news_kg": news_kg}

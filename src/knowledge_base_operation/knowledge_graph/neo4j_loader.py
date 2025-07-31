@@ -10,10 +10,10 @@ from __future__ import annotations
 import sys
 from typing import Any, Dict, List, Optional
 
-from neo4j import GraphDatabase, Driver, Session
+from neo4j import GraphDatabase, Driver
 
-from src.config import NEO4J_CONFIG
 from src.common.gadget import LOGGER
+from src.config import NEO4J_CONFIG
 
 
 class Neo4jLoader:
@@ -39,9 +39,9 @@ class Neo4jLoader:
             self.driver.close()
 
     def insert_data(
-        self,
-        nodes: List[Dict[str, Any]],
-        relationships: List[Dict[str, Any]]
+            self,
+            nodes: List[Dict[str, Any]],
+            relationships: List[Dict[str, Any]]
     ) -> None:
         """
         插入節點和關係到 Neo4j 資料庫。
