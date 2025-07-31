@@ -6,9 +6,12 @@
 """
 OpenAI 初始化與共用 kwargs
 """
-from openai import OpenAI
-from ..core.paths import OPENAI_API_KEY, MODEL_ID
 from typing import Dict, Any
+
+from openai import OpenAI
+
+from ..core.paths import OPENAI_API_KEY, MODEL_ID
+
 if not OPENAI_API_KEY:
     raise RuntimeError('環境變數 GPT_API 尚未設定')
 client = OpenAI(api_key=OPENAI_API_KEY)

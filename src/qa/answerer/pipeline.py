@@ -15,13 +15,13 @@ answerer ─ 問答主流程（Orchestrator）
 
 from __future__ import annotations
 
-import os
-import sys
 import argparse
+import os
 import re
+import sys
 from pathlib import Path
-from typing import List, Dict
 
+from .core.embedding import load_embedder, embed_triple, embed_text, dedupe
 # ──────────────────────── 本專案自製模組 ────────────────────────
 from .core.paths import (
     CKIP_ROOT,
@@ -32,20 +32,19 @@ from .core.paths import (
     EXTRACT_PROMPT_PATH,
     JUDGE_PROMPT_PATH,
 )
-from .core.embedding import load_embedder, embed_triple, embed_text, dedupe
 from .core.utils import safe_json_loads, clean_json_block
 from .kg.loader import load_kg_vectors, load_kg_df
 from .kg.search import search_by_triples
 from .llm.gpt import GPTClient
 from .llm.prompt_loader import load_prompt
-
+from ..tools import data_utils as du
 # 需用到 qa.tools 生成敘述區塊
 from ..tools import kg_nl as knl
-from ..tools import data_utils as du
 
 # ───────────────────────────── 參數設定 ─────────────────────────
-SIM_TH: float = 0.80          # KG 相似度門檻
-TOP_K: int   = 100            # 每個三元組取前 TOP_K 條
+SIM_TH: float = 0.80  # KG 相似度門檻
+TOP_K: int = 100  # 每個三元組取前 TOP_K 條
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Answerer pipeline: 指定問題檔案 <id>.txt")
@@ -74,7 +73,7 @@ def main() -> None:
     kg_vecs, kg_vecs_norm = load_kg_vectors(KG_EMB_PATH)
     kg_df, hp_col, rp_col, tp_col = load_kg_df(KG_CSV_PATH)
     extract_prompt = load_prompt(EXTRACT_PROMPT_PATH)
-    judge_prompt   = load_prompt(JUDGE_PROMPT_PATH)
+    judge_prompt = load_prompt(JUDGE_PROMPT_PATH)
     gpt = GPTClient(
         api_key=os.getenv("GPT_API"),
         model_id=os.getenv("GPT_MODEL", "gpt-4o"),
@@ -137,7 +136,7 @@ def main() -> None:
 
     # 5. 輸出至檔案
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    kg_out    = OUT_DIR / f"user_kg_{slug}.txt"
+    kg_out = OUT_DIR / f"user_kg_{slug}.txt"
     judge_out = OUT_DIR / f"user_qa_judge_{slug}.txt"
 
     kg_out.write_text(
@@ -152,10 +151,10 @@ def main() -> None:
     judge_result = gpt.chat(judge_prompt, kg_out.read_text(encoding="utf-8-sig"))
     # 移除所有反引號、井號與星號
     judge_result = (judge_result
-        .replace("`", "")
-        .replace("#", "")
-        .replace("*", "")
-    )
+                    .replace("`", "")
+                    .replace("#", "")
+                    .replace("*", "")
+                    )
     judge_out.write_text(judge_result, encoding="utf-8-sig")
 
     print("✅ finished; outputs saved under", OUT_DIR)

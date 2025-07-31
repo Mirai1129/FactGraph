@@ -7,10 +7,13 @@
 cosine_search 與 row → detail 
 """
 import json
-import numpy as np
 from typing import List, Dict, Tuple
+
+import numpy as np
+
 from .loader import KG_DF, KG_VECS_NORM, HP_COL, RP_COL, TP_COL
 from ..core.config import SIM_TH, TOP_K
+
 
 def cosine_search(tp: dict, q_vec: np.ndarray) -> List[int]:
     sims = KG_VECS_NORM @ q_vec
@@ -18,8 +21,10 @@ def cosine_search(tp: dict, q_vec: np.ndarray) -> List[int]:
     idx = idx[sims[idx] >= SIM_TH]
     return [i for i in idx if KG_DF.at[i, 'head'] == tp['head'] or KG_DF.at[i, 'tail'] == tp['tail']]
 
+
 def kg_row_to_detail(idx: int) -> Tuple[dict, Dict[str, dict]]:
     row = KG_DF.iloc[idx]
     tri = {'head': row['head'], 'relation': row['relation'], 'tail': row['tail']}
-    det = {'head': json.loads(row[HP_COL]) if HP_COL else {}, 'rel': json.loads(row[RP_COL]) if RP_COL else {}, 'tail': json.loads(row[TP_COL]) if TP_COL else {}}
+    det = {'head': json.loads(row[HP_COL]) if HP_COL else {}, 'rel': json.loads(row[RP_COL]) if RP_COL else {},
+           'tail': json.loads(row[TP_COL]) if TP_COL else {}}
     return (tri, det)

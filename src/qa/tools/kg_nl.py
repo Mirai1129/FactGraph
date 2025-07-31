@@ -31,10 +31,10 @@ def _fmt_props(props: Dict[str, Any]) -> str:
 
 
 def format_entity(
-    name: str,
-    props: Dict[str, Any],
-    *,
-    role: str = '未知實體'
+        name: str,
+        props: Dict[str, Any],
+        *,
+        role: str = '未知實體'
 ) -> str:
     """
     組裝實體描述：
@@ -60,13 +60,13 @@ def format_entity(
 
 
 def verbalize(
-    idx: int,
-    head: str,
-    relation: str,
-    tail: str,
-    head_props: Dict[str, Any],
-    rel_props: Dict[str, Any],
-    tail_props: Dict[str, Any]
+        idx: int,
+        head: str,
+        relation: str,
+        tail: str,
+        head_props: Dict[str, Any],
+        rel_props: Dict[str, Any],
+        tail_props: Dict[str, Any]
 ) -> str:
     """
     將單條三元組及其屬性轉為自然語言描述句。
@@ -90,14 +90,14 @@ def verbalize(
     time_part = f'；事件時間：{date}' if date else ''
 
     return (
-        f'{idx}. {head_desc} 透過關係【{relation}】'  
+        f'{idx}. {head_desc} 透過關係【{relation}】'
         f'與 {tail_desc} 建立連結，說明：{desc}{time_part}。'
     )
 
 
 def build_block(
-    triples: List[Dict[str, str]],
-    detail_map: Dict[Tuple[str, str, str], Dict[str, Dict[str, Any]]]
+        triples: List[Dict[str, str]],
+        detail_map: Dict[Tuple[str, str, str], Dict[str, Dict[str, Any]]]
 ) -> str:
     """
     將多條三元組及對應屬性映射轉為多行自然語言區塊。

@@ -3,17 +3,19 @@ Main Script for ETL Pipeline
 ...
 """
 
-import os
 import argparse
 import csv
+import os
+
+from bson import ObjectId
 from dotenv import load_dotenv
 from pymongo import MongoClient
-from bson import ObjectId
+
 from extraction import extract_entities_relations
-from transformation import transform_to_neo4j_format
 from neo4j_loader import Neo4jLoader
 from src.common.gadget import _init_logger as LOGGER
 from src.common.gadget import run_with_timer
+from transformation import transform_to_neo4j_format
 
 
 def load_ids_from_csv(path, id_column_index=1):

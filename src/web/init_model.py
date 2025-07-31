@@ -1,7 +1,8 @@
 # src/web/init_model.py
-import os
 import time
+
 from sentence_transformers import SentenceTransformer
+
 
 def load_ckip_model():
     model_name = 'ckiplab/bert-base-chinese'

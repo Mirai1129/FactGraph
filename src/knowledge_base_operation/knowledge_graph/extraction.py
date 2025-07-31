@@ -22,6 +22,7 @@ import sys
 from typing import Any, Dict, Optional
 
 import openai
+
 from src.common.gadget import LOGGER
 
 # 讀取環境變數

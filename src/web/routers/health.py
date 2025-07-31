@@ -3,9 +3,11 @@ from fastapi import APIRouter, Request
 
 router = APIRouter(tags=["health"])
 
+
 @router.get("/ping", summary="存活探針")
 async def ping() -> dict[str, str]:
     return {"status": "ok"}
+
 
 @router.get("/test")
 async def test() -> dict[str, str]:
@@ -14,6 +16,7 @@ async def test() -> dict[str, str]:
     """
     answer = "This is a test endpoint."
     return {"message": answer}
+
 
 @router.get("/ready", summary="就緒探針")
 async def ready(request: Request) -> dict[str, bool]:

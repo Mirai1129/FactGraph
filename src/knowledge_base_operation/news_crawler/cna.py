@@ -1,22 +1,26 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import json, re, time, random
-from pathlib import Path
+import json
+import random
+import re
+import time
 from datetime import datetime
+from pathlib import Path
+
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import WebDriverWait
 from webdriver_manager.chrome import ChromeDriverManager
 
 # ---------- 0. 參數 ----------
-#TOPIC_URL  = "https://www.cna.com.tw/news/asoc/202504080379.aspx?topic=4623"
-TOPIC_URL  = "https://www.cna.com.tw/news/aloc/202507310106.aspx"
+# TOPIC_URL  = "https://www.cna.com.tw/news/asoc/202504080379.aspx?topic=4623"
+TOPIC_URL = "https://www.cna.com.tw/news/aloc/202507310106.aspx"
 TARGET_NUM = 300
-OUT_PATH   = Path("data/raw/news/cna") / "cna_sample.json"
+OUT_PATH = Path("data/raw/news/cna") / "cna_sample.json"
 
 # ---------- 1. Selenium 基本設定 ----------
 opt = webdriver.ChromeOptions()
@@ -53,9 +57,10 @@ time.sleep(1 + random.uniform(0.5, 1.0))
 body = driver.find_element(By.TAG_NAME, "body")
 
 # ---------- 3. 收集動態變化的網址 ----------
-urls, seen  = [], set()
+urls, seen = [], set()
 current_url = driver.execute_script("return window.location.href")
-urls.append(current_url); seen.add(current_url)
+urls.append(current_url)
+seen.add(current_url)
 last_update_time = time.time()
 
 while len(urls) < TARGET_NUM:
@@ -64,8 +69,10 @@ while len(urls) < TARGET_NUM:
 
     new_url = driver.execute_script("return window.location.href")
     if new_url != current_url and new_url not in seen:
-        urls.append(new_url); seen.add(new_url)
-        current_url = new_url; last_update_time = time.time()
+        urls.append(new_url)
+        seen.add(new_url)
+        current_url = new_url
+        last_update_time = time.time()
         print("⇢ 新網址", new_url)
 
     if time.time() - last_update_time >= 10:
@@ -75,8 +82,8 @@ while len(urls) < TARGET_NUM:
 print(f"共收集 {len(urls)} 筆連結")
 
 # ---------- 4. 逐篇進入詳細頁抓取資料 ----------
-records  = []
-re_date  = re.compile(r"/news/[^/]+/(\d{12})\.aspx")
+records = []
+re_date = re.compile(r"/news/[^/]+/(\d{12})\.aspx")
 
 for url in urls:
     driver.get(url)
@@ -99,7 +106,7 @@ for url in urls:
 
     # 4-3 分類（breadcrumb 第 2 個 <a>）
     cat_elems = driver.find_elements(By.CSS_SELECTOR, ".breadcrumb a")
-    category  = cat_elems[1].text.strip() if len(cat_elems) > 1 else ""
+    category = cat_elems[1].text.strip() if len(cat_elems) > 1 else ""
 
     # 4-4 內文；去掉版權宣告
     paras = driver.find_elements(By.CSS_SELECTOR, "#article-body p, div.paragraph p")

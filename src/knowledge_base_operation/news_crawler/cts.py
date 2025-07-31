@@ -34,9 +34,7 @@ from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.common.by import By
 from webdriver_manager.chrome import ChromeDriverManager
-
 
 # ──────────────────────────────
 # 常數／設定
@@ -49,10 +47,10 @@ CATEGORIES = {
     "international": "國際",
     "society": "社會",
 }
-SCROLL_COUNT: int = 3               # 每一分類往下滾動次數
-WAIT_BETWEEN_SCROLL: float = 3      # 每次滾動後等待秒數
-RANDOM_WAIT_MIN: float = 1.5        # 進內文隨機等待下限
-RANDOM_WAIT_MAX: float = 5.0        # 進內文隨機等待上限
+SCROLL_COUNT: int = 3  # 每一分類往下滾動次數
+WAIT_BETWEEN_SCROLL: float = 3  # 每次滾動後等待秒數
+RANDOM_WAIT_MIN: float = 1.5  # 進內文隨機等待下限
+RANDOM_WAIT_MAX: float = 5.0  # 進內文隨機等待上限
 USER_AGENT: str = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "

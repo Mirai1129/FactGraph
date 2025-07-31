@@ -14,7 +14,6 @@ KG 檢索模組
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from typing import (
     List, Dict, Any,
     Callable, Optional
@@ -25,16 +24,16 @@ import pandas as pd
 
 
 def search_by_triples(
-    triples: List[Dict[str, str]],
-    embed_fn: Callable[[Dict[str, str]], np.ndarray],
-    kg_vecs_norm: np.ndarray,
-    kg_df: pd.DataFrame,
-    build_block_fn: Callable[..., str],
-    top_k: int = 100,
-    sim_th: float = 0.8,
-    hp_col: Optional[str] = None,
-    rp_col: Optional[str] = None,
-    tp_col: Optional[str] = None
+        triples: List[Dict[str, str]],
+        embed_fn: Callable[[Dict[str, str]], np.ndarray],
+        kg_vecs_norm: np.ndarray,
+        kg_df: pd.DataFrame,
+        build_block_fn: Callable[..., str],
+        top_k: int = 100,
+        sim_th: float = 0.8,
+        hp_col: Optional[str] = None,
+        rp_col: Optional[str] = None,
+        tp_col: Optional[str] = None
 ) -> List[str]:
     """
     依據輸入的三元組列表進行向量相似度檢索，
@@ -77,7 +76,7 @@ def search_by_triples(
             # 屬性詳情
             det: Dict[str, Dict[str, Any]] = {
                 'head': json.loads(row[hp_col]) if hp_col and row.get(hp_col) else {},
-                'rel':  json.loads(row[rp_col]) if rp_col and row.get(rp_col) else {},
+                'rel': json.loads(row[rp_col]) if rp_col and row.get(rp_col) else {},
                 'tail': json.loads(row[tp_col]) if tp_col and row.get(tp_col) else {}
             }
             # 使用外部函式組合文字區塊

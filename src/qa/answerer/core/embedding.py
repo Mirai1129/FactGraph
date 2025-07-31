@@ -12,8 +12,8 @@ Embedding helpers (CKIP-SBERT) with dedupe functionality.
 
 from __future__ import annotations
 
-from pathlib import Path
 import re
+from pathlib import Path
 from typing import List, Callable
 
 import numpy as np
@@ -29,10 +29,10 @@ def _resolve_snapshot(root: Path) -> Path:
     root = root.expanduser()
     # 直接在 root 目錄下
     if (root / 'config.json').is_file() and any(
-        (root / ext).is_file() for ext in [
-            'pytorch_model.bin', 'model.safetensors', 'tf_model.h5',
-            'model.ckpt.index', 'flax_model.msgpack'
-        ]
+            (root / ext).is_file() for ext in [
+                'pytorch_model.bin', 'model.safetensors', 'tf_model.h5',
+                'model.ckpt.index', 'flax_model.msgpack'
+            ]
     ):
         return root
 
@@ -41,10 +41,10 @@ def _resolve_snapshot(root: Path) -> Path:
     if snapshots.is_dir():
         for cand in snapshots.iterdir():
             if (cand / 'config.json').is_file() and any(
-                (cand / ext).is_file() for ext in [
-                    'pytorch_model.bin', 'model.safetensors', 'tf_model.h5',
-                    'model.ckpt.index', 'flax_model.msgpack'
-                ]
+                    (cand / ext).is_file() for ext in [
+                        'pytorch_model.bin', 'model.safetensors', 'tf_model.h5',
+                        'model.ckpt.index', 'flax_model.msgpack'
+                    ]
             ):
                 return cand
 
@@ -76,9 +76,9 @@ def embed_triple(emb: SentenceTransformer, tp: dict[str, str]) -> np.ndarray:
 
 
 def dedupe(
-    lines: List[str],
-    embed_fn: Callable[[str], np.ndarray],
-    threshold: float
+        lines: List[str],
+        embed_fn: Callable[[str], np.ndarray],
+        threshold: float
 ) -> List[str]:
     """
     依第一實體分桶，同一桶內若相似度 >= threshold 視為重複，

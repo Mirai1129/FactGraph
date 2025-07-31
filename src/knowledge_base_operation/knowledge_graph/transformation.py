@@ -7,6 +7,7 @@ Transformation Module
 """
 from typing import Any, Dict, List, Tuple
 
+
 def _ensure_list(value: Any) -> List[Any]:
     """確保 value 為 list；None 轉空 list，非 list 則包成 list。"""
     if value is None:
@@ -14,6 +15,7 @@ def _ensure_list(value: Any) -> List[Any]:
     if isinstance(value, list):
         return value
     return [value]
+
 
 def transform_to_neo4j_format(extraction_result: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """將抽取結果轉為 Neo4j 可匯入的 nodes 與 relationships。"""
@@ -35,5 +37,8 @@ def transform_to_neo4j_format(extraction_result: Dict[str, Any]) -> Tuple[List[D
             continue
         for s in src_ids:
             for t in tgt_ids:
-                relationships.append({'source': s, 'target': t, 'source_name': id_to_name.get(s, ''), 'target_name': id_to_name.get(t, ''), 'relation': rel.get('relation', rel.get('type', 'RELATED_TO')), 'evidence': rel.get('evidence', ''), **rel.get('attributes', {})})
+                relationships.append({'source': s, 'target': t, 'source_name': id_to_name.get(s, ''),
+                                      'target_name': id_to_name.get(t, ''),
+                                      'relation': rel.get('relation', rel.get('type', 'RELATED_TO')),
+                                      'evidence': rel.get('evidence', ''), **rel.get('attributes', {})})
     return (nodes, relationships)

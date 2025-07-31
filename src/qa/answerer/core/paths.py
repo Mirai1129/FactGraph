@@ -9,8 +9,9 @@
 """
 
 from __future__ import annotations
+
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Dict, Any
 
 __all__ = [
     'PROJECT_ROOT', 'FACTGRAPH_SRC', 'ANSWERER_ROOT', 'DATA_DIR',
@@ -30,6 +31,7 @@ def _find_project_root(start: Path | None = None) -> Path:
     raise RuntimeError(
         "無法定位 FactGraph 專案根目錄，需包含 'models' 與 'data' 資料夾"
     )
+
 
 # 專案結構根目錄
 PROJECT_ROOT: Path = _find_project_root()

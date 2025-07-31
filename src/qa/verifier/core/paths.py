@@ -21,7 +21,7 @@ load_dotenv()
 
 
 def _find_repo_root(marker: str = 'FactGraph',
-                   env_var: str = 'PROJECT_ROOT') -> Path:
+                    env_var: str = 'PROJECT_ROOT') -> Path:
     """
     從當前檔案位置向上遍歷，直到資料夾名稱符合 marker。
 
@@ -34,16 +34,17 @@ def _find_repo_root(marker: str = 'FactGraph',
     """
     # 1️⃣ 若有環境變數就直接用
     if env_val := os.getenv(env_var):
-         p = Path(env_val).resolve()
-         if p.is_dir():
+        p = Path(env_val).resolve()
+        if p.is_dir():
             return p
 
-     # 2️⃣ 否則沿父層尋找指定資料夾
+    # 2️⃣ 否則沿父層尋找指定資料夾
     current = Path(__file__).resolve()
     for parent in (current, *current.parents):
         if parent.name == marker:
             return parent
     raise RuntimeError(f'找不到專案根目錄: {marker}')
+
 
 # 根目錄
 PROJECT_ROOT: Path = _find_repo_root()

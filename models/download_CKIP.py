@@ -1,4 +1,5 @@
 import time
+
 from sentence_transformers import SentenceTransformer
 
 # 指定模型名稱與自訂快取資料夾
